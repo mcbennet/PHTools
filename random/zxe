@@ -1,0 +1,83 @@
+#! /usr/bin/env python3
+
+import numpy as np
+import sys, getopt
+from generic import obj   
+
+clabels=['S','P','D','F','G']
+
+def ppchannel(r,coeff,alpha,powers):
+    val = 0
+    for ci,c in enumerate(coeff):
+        val = val+c*r**(powers[ci]-2)*np.exp(-alpha[ci]*r*r)
+    #end for
+    return val
+#end def
+
+def printchans(pots):
+    print('\nPrinting pseudopotential...')
+    lloc = clabels[len(pots)-1]
+    for i in range(len(pots)):
+        if i==len(pots)-1:
+            print(lloc)
+        else:
+            print(str(clabels[i])+'-'+str(lloc))
+        #end if
+        for i,p in enumerate(pots[i]):
+            print("{:3d} {:12s} {:12s}".format(int(p[0]),p[1],p[2]))
+        #end for
+    #end for
+#end def
+
+#def make_
+
+if len(sys.argv)<2:
+    print('plot_yoon_psuedo -i <inputppfile>')
+    sys.exit(2)
+#end if 
+
+inputlabels=None
+try:
+    opts, args = getopt.getopt(sys.argv[1:],"hi:l:",["ifile=","labels="])
+except getopt.GetoptError:
+   print('plot_yoon_psuedo -i <inputppfile>')
+   sys.exit(2)
+for opt, arg in opts:
+   if opt == '-h':
+      print('plot_yoon_psuedo -i <inputppfile>')
+      sys.exit()
+   elif opt in ("-i", "--ifile"):
+      inputfile = arg
+#end try
+
+print('\nUpdating ZXE...')
+f=open(inputfile, "r")
+
+d=np.array(f.read().split())
+
+f.seek(0)
+pptext = f.read()
+f.close()
+
+# HEADER
+dhead=d[0:2]
+# CHANNEL LENGTHS
+nchan=int(dhead[1])
+dchan=d[2:2+nchan]
+dchan=np.array(dchan,dtype=int)
+# POTENTIALS
+dpots=[]
+pos=0
+for i in range(len(dchan)):
+    dtmp = d[2+nchan+int(pos):2+nchan+int(pos+dchan[i]*3)]
+    dtmp.shape=len(dtmp)//3,3
+    pos+=dchan[i]*3
+    dpots.append(dtmp)
+#end for
+
+for t in dpots[2]:
+    if t[0]=='1':
+        pptext = pptext.replace('ZXE',str(float(t[1])*float(t[2])))
+
+f=open(inputfile, "w")
+f.write(pptext)

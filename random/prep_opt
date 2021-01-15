@@ -1,0 +1,176 @@
+#! /usr/bin/env python3
+
+import os
+import numpy as np
+import sys, getopt
+from generic import obj   
+from libzxe import replace_zxe
+
+clabels=['S','P','D','F','G']
+
+def ppchannel(r,coeff,alpha,powers):
+    val = 0
+    for ci,c in enumerate(coeff):
+        val = val+c*r**(powers[ci]-2)*np.exp(-alpha[ci]*r*r)
+    #end for
+    return val
+#end def
+
+def printchans(pots):
+    print('\nPrinting pseudopotential...')
+    lloc = clabels[len(pots)-1]
+    for i in range(len(pots)):
+        if i==len(pots)-1:
+            print(lloc)
+        else:
+            print(str(clabels[i])+'-'+str(lloc))
+        #end if
+        for i,p in enumerate(pots[i]):
+            print("{:3d} {:12s} {:12s}".format(int(p[0]),p[1],p[2]))
+        #end for
+    #end for
+#end def
+
+#def make_
+
+if len(sys.argv)<2:
+    print('prep_opt -i <inputppfile>')
+    sys.exit(2)
+#end if 
+
+inputlabels=None
+transtype=None
+try:
+    opts, args = getopt.getopt(sys.argv[1:],"hi:l:t:",["ifile=","labels=","trans="])
+except getopt.GetoptError:
+   print('prep_opt -i <inputppfile>')
+   sys.exit(2)
+for opt, arg in opts:
+   if opt == '-h':
+      print('prep_opt -i <inputppfile>')
+      sys.exit()
+   elif opt in ("-i", "--ifile"):
+      inputfile = arg
+   elif opt in ("-t", "--trans"):
+      transtype = int(arg)
+#end try
+
+if transtype is None:
+    print('prep_opt -i <inputppfile> -t <transtype>')
+
+print('\nInput file is: ', inputfile)
+print('\nReading pseudopotential...')
+f=open(inputfile, "r")
+
+d=np.array(f.read().split())
+
+f.seek(0)
+pptext = f.read()
+
+f.seek(0)
+zeropptext = f.read()
+zeropptext = zeropptext.replace('*',' ')
+f.close()
+
+f = open('zeroth.pp.d','w')
+f.write(zeropptext)
+f.close()
+
+if 'ZXE' in zeropptext:  
+    replace_zxe('zeroth.pp.d')
+#end if
+
+os.system('transform_yoon -i zeroth.pp.d -t {} -o zeroth.pp.d'.format(transtype))
+
+
+# HEADER
+dhead=d[0:2]
+# CHANNEL LENGTHS
+nchan=int(dhead[1])
+dchan=d[2:2+nchan]
+dchan=np.array(dchan,dtype=int)
+# POTENTIALS
+dpots=[]
+pos=0
+for i in range(len(dchan)):
+    dtmp = d[2+nchan+int(pos):2+nchan+int(pos+dchan[i]*3)]
+    dtmp.shape=len(dtmp)//3,3
+    pos+=dchan[i]*3
+    dpots.append(dtmp)
+#end for
+
+dp = obj()
+dp[0]=dpots[0]
+dp[1]=dpots[1]
+dp[2]=dpots[2]
+
+uf_param_str = ''
+uf_minparam_str = ''
+uf_maxparam_str = ''
+vcount=0
+for c in range(len(dpots)):
+    terms=[]
+    for t in range(len(dpots[c])):
+        params=[]
+        for p in range(len(dpots[c][t])):
+            if '*' in dpots[c][t][p]:
+                pptext=pptext.replace(dpots[c][t][p],'v{:03d}'.format(vcount),1)
+                params.extend([True])
+                uf_param_str+=dpots[c][t][p][:-1]+','
+                uf_minparam_str+='-10000.0,'
+                uf_maxparam_str+='10000.0,'
+                vcount+=1
+            else:
+                params.extend([False])
+            #end if
+        #end for
+        terms.append(params)
+    #end for
+    dp['v'+str(c)]=terms
+#end for
+uf_param_str=uf_param_str[:-1]
+uf_minparam_str=uf_minparam_str[:-1]
+uf_maxparam_str=uf_maxparam_str[:-1]
+
+
+f = open('./templates/userfu.init','r')
+ftext = f.read()
+ftext = ftext.replace('PARAMVALUES',uf_param_str)
+ftext = ftext.replace('MINVALUES',uf_minparam_str)
+ftext = ftext.replace('MAXVALUES',uf_maxparam_str)
+ftext = ftext.replace('n      =  -1000','n      =  {}'.format(vcount))
+ftext = ftext.replace('xst0[-1000]','xst0[{}]'.format(vcount+1))
+ftext = ftext.replace('ugloc[-1000]','ugloc[{}]'.format(vcount+1))
+ftext = ftext.replace('ogloc[-1000]','ogloc[{}]'.format(vcount+1))
+f.close()
+
+
+f = open('userfu.c','w')
+f.write(ftext)
+f.close()
+
+f = open('tmp.pp.d','w')
+f.write(pptext)
+f.close()
+
+
+# Now update runyoon
+
+f = open('./templates/runyoon.init','r')
+rytext = f.read()
+f.close()
+
+rytext = rytext.replace('PMAX',str(vcount))
+
+sedtext = 'sed "s/v000/${param[1]}/g; \\\n'
+for i in range(1,vcount):
+    sedtext+="     s/v{:03d}/${}param[{}]{}/g; \\\n".format(i,'{',i+1,'}')
+
+sedtext=sedtext[:-1]
+rytext = rytext.replace('SED_COMMAND',sedtext)
+rytext = rytext.replace('TRANSFORMTYPE',str(transtype))
+
+f = open('runyoon','w')
+f.write(rytext)
+f.close()
+

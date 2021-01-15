@@ -1,0 +1,202 @@
+#!/usr/bin/env python3
+
+import math
+import numpy as np
+import sys, getopt
+
+print('\nSolving linear equations for coefficients...')
+
+clabels=['S','P','D','F','G']
+
+def ppchannel(r,coeff,alpha,powers):
+    val = 0
+    for ci,c in enumerate(coeff):
+        val = val+c*r**(powers[ci]-2)*np.exp(-alpha[ci]*r*r)
+    #end for
+    return val
+#end def
+
+def printchans(pots):
+    print('\nPrinting pseudopotential...')
+    lloc = clabels[len(pots)-1]
+    for i in range(len(pots)):
+        if i==len(pots)-1:
+            print(lloc)
+        else:
+            print(str(clabels[i])+'-'+str(lloc))
+        #end if
+        for i,p in enumerate(pots[i]):
+            print("{:3d} {:12f} {:12f}".format(int(p[0]),p[1],p[2]))
+        #end for
+    #end for
+#end def
+
+def p7(x,c):
+    val=0
+    for ci,cv in enumerate(c):
+        val+=cv*x**ci
+    return val
+#end def
+
+def Rs(x,dx,s,c):
+    if x+1-s<-dx:
+        return 0-(1-s)
+    elif x+1-s>dx:
+        return x
+    else:
+        return p7(x+1-s,c)-(1-s)
+#end def
+
+def gauss_correction(x,c1,c2,c3):
+    val = 0
+    exps=[12.5,18.75,28.125]
+    for ci,c in enumerate([c1,c2,c3]):
+        val+=x**2.*c*np.exp(-exps[ci]*x**2.)
+    #end for
+    return val
+#end def
+
+if len(sys.argv)<2:
+    print('ramp -i <inputppfile>')
+    sys.exit(2)
+#end if 
+
+inputfile = ''
+dofit = False
+doplot = False
+try:
+    opts, args = getopt.getopt(sys.argv[1:],"hfpi:",["ifile="])
+except getopt.GetoptError:
+   print('ramp -i <inputppfile>')
+   sys.exit(2)
+for opt, arg in opts:
+   if opt == '-h':
+      print('ramp -i <inputppfile>')
+      sys.exit()
+   elif opt == '-f':
+       dofit = True
+   elif opt == '-p':
+       doplot = True
+   elif opt in ("-i", "--ifile"):
+      inputfile = arg
+print('\nInput file is: ', inputfile)
+
+print('\nReading pseudopotential...')
+filepath1=inputfile
+f1=open(filepath1, "r")
+
+d1=np.array(f1.read().split(),dtype=float)
+f1.close()
+
+# HEADER
+d1head=d1[0:2]
+# CHANNEL LENGTHS
+nchan=int(d1head[1])
+d1chan=d1[2:2+nchan]
+# POTENTIALS
+d1pots=[]
+pos=0
+for i in range(len(d1chan)):
+    dtmp = d1[2+nchan+int(pos):2+nchan+int(pos+d1chan[i]*3)]
+    dtmp.shape=len(dtmp)//3,3
+    pos+=d1chan[i]*3
+    d1pots.append(dtmp)
+#end for
+
+# Print Pseudo
+printchans(d1pots)
+
+db=1.6
+dbs=0.0005
+
+A=[]
+for i in range(8):
+    row=[]
+    for j in range(8):
+        if i<4:
+            if j-i<0:
+                dcoeff=0
+                dpower=0
+            else:
+                dcoeff=math.factorial(j)/math.factorial(j-i)
+                dpower=j-i
+            #end if
+            row.append(dcoeff*db**dpower)
+        else:
+            if j-(i-4)<0:
+                dcoeff=0
+                dpower=0
+            else:
+                dcoeff=math.factorial(j)/math.factorial(j-(i-4))
+                dpower=j-(i-4)
+            #end if
+            row.append(dcoeff*(-db)**dpower)
+        #end if
+    #end for
+    A.append(row)
+#end for
+
+A = np.array(A)
+b = np.array([db,1]+[0]*6)
+c = np.linalg.inv(A).dot(b)
+
+ng=3000
+gmin=0.02
+gmax=0.85
+r = np.linspace( gmin, gmax, ng )
+
+# PP
+v = []
+for i in range(nchan):
+    vtmp = []
+    for j in range(len(r)):
+        vtmp.append(ppchannel(r[j],d1pots[i][:,2],d1pots[i][:,1],d1pots[i][:,0]))
+    #for
+    v.append(vtmp)
+#for
+v=np.array(v)
+
+# 2*r^2*VL2 
+f = r*r*(v[1]-v[0])
+# 2*r^2*V'L2 
+fp = [Rs(fr,db,dbs,c) for fr in f]
+
+undoundedness = 0
+for fi,fx in enumerate(f):
+    undoundedness+=(fp[fi]-fx)*(gmax-gmin)/ng 
+#end for
+print('\npseudopotential undoundedness: ',undoundedness)
+
+if dofit:
+    import matplotlib.pyplot as plt
+    from scipy.optimize import curve_fit
+
+    #xdata = np.linspace(0, 4, 50)
+    #y = func(xdata, 2.5, 1.3, 0.5)
+    #np.random.seed(1729)
+    #y_noise = 0.2 * np.random.normal(size=xdata.size)
+    #ydata = y + y_noise
+    #plt.plot(r, fp, 'b-', label='fp')
+    plt.plot(r, fp, 'g-', label='fp')
+    
+    popt, pcov = curve_fit(gauss_correction, r, f-fp)
+    print(popt)
+
+    plt.xlabel('r (bohr)')
+    plt.ylabel('$2r^2v_{L^2}$')
+    plt.plot(r, f-gauss_correction(r, *popt), 'r-',label='f-corr')
+    plt.plot(r, f, 'b-',label='f')
+    #plt.plot(r, fp, 'g-',label='fp')
+    plt.plot(r, [-1]*len(r), 'k-',label=None)
+    plt.legend()
+    plt.show()
+
+elif doplot:
+    import matplotlib.pyplot as plt
+    from scipy.optimize import curve_fit
+
+    plt.plot(r, fp, 'g-', label='fp')
+    plt.plot(r, f, 'g-', label='f')
+    plt.show()
+
+print()

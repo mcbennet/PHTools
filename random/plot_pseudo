@@ -1,0 +1,159 @@
+#! /usr/bin/env python3
+
+import matplotlib.pyplot as plt
+import numpy as np
+import sys, getopt
+    
+clabels=['S','P','D','F','G']
+
+def ppchannel(r,coeff,alpha,powers):
+    val = 0
+    for ci,c in enumerate(coeff):
+        val = val+c*r**(powers[ci]-2)*np.exp(-alpha[ci]*r*r)
+    #end for
+    return val
+#end def
+
+def printchans(pots):
+    print('\nPrinting pseudopotential...')
+    lloc = clabels[len(pots)-1]
+    for i in range(len(pots)):
+        if i==len(pots)-1:
+            print(lloc)
+        else:
+            print(str(clabels[i])+'-'+str(lloc))
+        #end if
+        for i,p in enumerate(pots[i]):
+            print("{:3d} {:12f} {:12f}".format(int(p[0]),p[1],p[2]))
+        #end for
+    #end for
+#end def
+
+if len(sys.argv)<2:
+    print('plot_yoon_psuedo -i <inputppfile>')
+    sys.exit(2)
+#end if 
+
+inputlabels=None
+xmlinput = None
+try:
+    opts, args = getopt.getopt(sys.argv[1:],"hi:l:x:",["ifile=","labels=","xml="])
+except getopt.GetoptError:
+   print('plot_yoon_psuedo -i <inputppfile>')
+   sys.exit(2)
+for opt, arg in opts:
+   if opt == '-h':
+      print('plot_yoon_psuedo -i <inputppfile>')
+      sys.exit()
+   elif opt in ("-i", "--ifile"):
+      inputfiles = arg.split()
+   elif opt in ("-l", "--labels"):
+      inputlabels = arg.split()
+   elif opt in ("-x", "--xml"):
+      xmlinput = arg
+#end try
+
+
+
+if inputlabels is None:
+    inputlabels=[]
+    for i in range(len(inputfiles)):
+        inputlabels.append(str(i))
+
+if xmlinput is not None:
+    print('XML Found')
+    from pseudopotential import QmcpackPP
+    ppf = QmcpackPP(xmlinput) 
+
+
+# PP figure
+fig1 = plt.figure()
+ax1 = fig1.add_subplot(111)
+
+# Boundedness figure
+fig2 = plt.figure()
+ax2 = fig2.add_subplot(111)
+
+linestyles=['-','--','-.']
+colors=['r','g','b','purple','orange']
+
+lvals = list(ppf.l_channels)
+if xmlinput is not None:
+    for ci,c in enumerate(ppf['components']):
+        v = ppf.evaluate_channel(ppf.r,l=lvals[ci],rpow=0,rmin=ppf.r[1])
+        ax1.plot(ppf.r[2:], v, label='XML '+lvals[ci], color='darkred', linestyle=linestyles[0],linewidth=4)
+
+
+for fi,inputfile in enumerate(inputfiles):
+    print('\nInput file is: ', inputfile)
+    print('\nReading pseudopotential...')
+    filepath1=inputfile
+    f1=open(filepath1, "r")
+    
+    d1=np.array(f1.read().split(),dtype=float)
+    f1.close()
+    
+    # HEADER
+    d1head=d1[0:2]
+    # CHANNEL LENGTHS
+    nchan=int(d1head[1])
+    d1chan=d1[2:2+nchan]
+    # POTENTIALS
+    d1pots=[]
+    pos=0
+    for i in range(len(d1chan)):
+        dtmp = d1[2+nchan+int(pos):2+nchan+int(pos+d1chan[i]*3)]
+        dtmp.shape=len(dtmp)//3,3
+        pos+=d1chan[i]*3
+        d1pots.append(dtmp)
+    #end for
+    
+    # Print Pseudo
+    printchans(d1pots)
+    
+    # 100 linearly spaced numbers
+    r = np.linspace(0.001,3,3000)
+    
+    y = []
+    for i in range(nchan):
+        ytmp = []
+        for j in range(len(r)):
+            ytmp.append(ppchannel(r[j],d1pots[i][:,2],d1pots[i][:,1],d1pots[i][:,0]))
+        #for
+        y.append(ytmp)
+    #for
+    y=np.array(y)
+    
+    # setting the axes at the centre
+    #ax = fig.add_subplot(1, 1, 1)
+    
+    ax1.plot(r,-d1head[0]/r, 'k-',linewidth=2,label=None)
+    # plot the function
+    for i in range(nchan):
+        if i==len(d1pots)-1:
+            label=inputlabels[fi]+' Local'
+            ax1.plot(r,y[i]-d1head[0]/r, label=label,color=colors[fi],linestyle=linestyles[i])
+        else:
+            label=inputlabels[fi]+' Local+'+clabels[i]
+            ax1.plot(r,y[nchan-1]+y[i]-d1head[0]/r, label=label, color=colors[fi], linestyle=linestyles[i])
+        #end if
+    #end for
+    
+    # Pure Coulomb
+    #ax1.set_ylim(max(np.min(-d1head[0]/r+y[nchan-1])-5,-700),np.max(y[0]-d1head[0]/r+y[nchan-1])+100)
+    ax1.set_ylim(-120,50)
+    ax1.set_xlim(0,1.3)
+    ax1.legend()
+    
+    ax2.plot(r,[1]*len(r),color='k',label=None)
+    ax2.plot(r,[0]*len(r),color='k',label=None)
+    ax2.plot(r,r*r*(y[1]-y[0])+[1]*len(r),label=inputlabels[fi]+' L2 Constraint',color=colors[fi])
+    ax2.set_xlim(0,1.5)
+    ax2.set_ylim(-0.6,1.6)
+    ax2.legend(loc='lower right')
+
+#end for
+    
+# show the plot
+plt.show()
+

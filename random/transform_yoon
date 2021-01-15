@@ -1,0 +1,266 @@
+#! /usr/bin/env python3
+
+import numpy as np
+import sys, getopt
+    
+clabels=['S','P','D','F','G']
+
+def ppchannel(r,coeff,alpha,powers):
+    val = 0
+    for ci,c in enumerate(coeff):
+        val = val+c*r**(powers[ci]-2)*np.exp(-alpha[ci]*r*r)
+    #end for
+    return val
+#end def
+
+def printchans(pots):
+    print('\nPrinting pseudopotential...')
+    lloc = clabels[len(pots)-1]
+    for i in range(len(pots)):
+        if i==len(pots)-1:
+            print(lloc)
+        else:
+            print(str(clabels[i])+'-'+str(lloc))
+        #end if
+        for j,p in enumerate(pots[i]):
+            print("{:3d} {:12f} {:12f}".format(int(p[0]),p[1],p[2]))
+        #end for
+    #end for
+#end def
+
+def printchansyoon(pots,Z,outfile=None):
+    if outfile is None:
+        print('\nPrinting pseudopotential in yoon format...')
+        print(int(Z),len(pots))
+        for p in pots:
+            print(len(p),end=' ')
+        print()
+        for i in range(len(pots)):
+            for j,p in enumerate(pots[i]):
+                print("{:d} {:12f} {:12f}".format(int(p[0]),p[1],p[2]))
+            #end for
+        #end for
+    else:
+        f = open(outf, "w")
+        f.write(str(int(Z))+' '+str(len(pots))+'\n')
+        for p in pots:
+            f.write(str(len(p))+' ')
+        f.write('\n')
+        for i in range(len(pots)):
+            for j,p in enumerate(pots[i]):
+                f.write("{:d} {:12f} {:12f} \n".format(int(p[0]),p[1],p[2]))
+            #end for
+        #end for
+        f.close()
+#end def
+
+def trans1(pots):
+
+    tpots = pots.copy() 
+
+    tpots[1] = tpots[0].copy()
+    for i,p in enumerate(tpots[1]):
+        tpots[1][i][2] = 2.*p[2]/3.
+
+    return tpots
+
+#end def
+
+def trans2(pots):
+
+    tpots = pots.copy() 
+
+    tpots[0] = tpots[1].copy()
+    for i,p in enumerate(tpots[0]):
+        tpots[0][i][2] = 3.*p[2]/2.
+
+    return tpots
+
+#end def
+
+def trans3(pots):
+
+    tpots = pots.copy() 
+
+    vs = tpots[0].copy()
+    for i,term in enumerate(vs):
+        vs[i][2] *= -2.
+
+    vp = tpots[1].copy()
+    for i,term in enumerate(vp):
+        vp[i][2] *= 3.
+
+    tpots[2] = np.append(tpots[2],vs,axis=0)
+    tpots[2] = np.append(tpots[2],vp,axis=0)
+
+    for i,term in enumerate(vs):
+        vs[i][2] *= -1.
+
+    for i,term in enumerate(vp):
+        vp[i][2] *= -1.
+
+    tpots[0] = np.append(tpots[0],vs,axis=0)
+    tpots[0] = np.append(tpots[0],vp,axis=0)
+
+    tpots[1] = np.append(tpots[1],vs,axis=0)
+    tpots[1] = np.append(tpots[1],vp,axis=0)
+
+    return tpots
+
+#end def
+
+if len(sys.argv)<2:
+    print('plot_yoon_psuedo -i <inputppfile>')
+    sys.exit(2)
+#end if 
+
+transtype=None
+writefile=False
+try:
+    opts, args = getopt.getopt(sys.argv[1:],"phi:t:o:",["ifile=","trans=","outfile="])
+except getopt.GetoptError:
+   print('plot_yoon_psuedo -i <inputppfile>')
+   sys.exit(2)
+for opt, arg in opts:
+   if opt == '-h':
+      print('plot_yoon_psuedo -i <inputppfile>')
+      sys.exit()
+   elif opt in ("-i", "--ifile"):
+      inputfile = arg
+   elif opt in ("-t", "--trans"):
+      transtype = int(arg)
+   elif opt in ("-o", "--outfile"):
+      writefile = True
+      outf = arg
+   elif opt == '-p':
+      doplot=True
+#end try
+
+print('\nInput file is: ', inputfile)
+print('\nReading pseudopotential...')
+filepath=inputfile
+f=open(filepath, "r")
+
+d=np.array(f.read().split(),dtype=float)
+f.close()
+
+# HEADER
+dhead=d[0:2]
+# CHANNEL LENGTHS
+nchan=int(dhead[1])
+dchan=d[2:2+nchan]
+# POTENTIALS
+dpots=[]
+pos=0
+for i in range(len(dchan)):
+    dtmp = d[2+nchan+int(pos):2+nchan+int(pos+dchan[i]*3)]
+    dtmp.shape=len(dtmp)//3,3
+    pos+=dchan[i]*3
+    dpots.append(dtmp)
+#end for
+
+if transtype is not None:
+
+    if transtype==1:
+        tpots = trans1(dpots)
+    elif transtype==2:
+        tpots = trans2(dpots)
+    elif transtype==3:
+        tpots = trans3(dpots)
+    #end if
+
+if writefile:
+    printchansyoon(tpots,dhead[0],outfile=outf)
+
+quit()
+
+# Print Pseudo
+printchansyoon(dpots)
+quit()
+
+
+import matplotlib.pyplot as plt
+
+# PP figure
+fig1 = plt.figure()
+ax1 = fig1.add_subplot(111)
+
+# Boundedness figure
+fig2 = plt.figure()
+ax2 = fig2.add_subplot(111)
+
+colors=['r','g','b','purple','orange']
+
+for fi,inputfile in enumerate(inputfiles):
+    print('\nInput file is: ', inputfile)
+    print('\nReading pseudopotential...')
+    filepath1=inputfile
+    f1=open(filepath1, "r")
+    
+    d1=np.array(f1.read().split(),dtype=float)
+    f1.close()
+    
+    # HEADER
+    d1head=d1[0:2]
+    # CHANNEL LENGTHS
+    nchan=int(d1head[1])
+    d1chan=d1[2:2+nchan]
+    # POTENTIALS
+    d1pots=[]
+    pos=0
+    for i in range(len(d1chan)):
+        dtmp = d1[2+nchan+int(pos):2+nchan+int(pos+d1chan[i]*3)]
+        dtmp.shape=len(dtmp)//3,3
+        pos+=d1chan[i]*3
+        d1pots.append(dtmp)
+    #end for
+    
+    # Print Pseudo
+    printchans(d1pots)
+    
+    # 100 linearly spaced numbers
+    r = np.linspace(0.001,3,3000)
+    
+    y = []
+    for i in range(nchan):
+        ytmp = []
+        for j in range(len(r)):
+            ytmp.append(ppchannel(r[j],d1pots[i][:,2],d1pots[i][:,1],d1pots[i][:,0]))
+        #for
+        y.append(ytmp)
+    #for
+    y=np.array(y)
+    
+    # setting the axes at the centre
+    #ax = fig.add_subplot(1, 1, 1)
+    
+    ax1.plot(r,-d1head[0]/r, 'k-',linewidth=2,label=None)
+    # plot the function
+    linestyles=['-','--','-.']
+    for i in range(nchan):
+        if i==len(d1pots)-1:
+            label=inputlabels[fi]+' Local'
+            ax1.plot(r,y[i]-d1head[0]/r, label=label,color=colors[fi],linestyle=linestyles[i])
+        else:
+            label=inputlabels[fi]+' Local+'+clabels[i]
+            ax1.plot(r,y[nchan-1]+y[i]-d1head[0]/r, label=label, color=colors[fi], linestyle=linestyles[i])
+        #end if
+    #end for
+    
+    # Pure Coulomb
+    ax1.set_ylim(max(np.min(-d1head[0]/r+y[nchan-1])-5,-700),np.max(y[0]-d1head[0]/r+y[nchan-1])+5)
+    #plt.ylim(-50,50)
+    ax1.set_xlim(0,2)
+    ax1.legend()
+    
+    ax2.plot(r,[0]*len(r),color='k',label=None)
+    ax2.plot(r,r*r*(y[1]-y[0])+[1]*len(r),label=inputlabels[fi]+' L2 Constraint',color=colors[fi])
+    ax2.set_xlim(0,2.5)
+    ax2.set_ylim(-1.0,1.1)
+    ax2.legend(loc='lower right')
+
+#end for
+    
+# show the plot
+plt.show()
+

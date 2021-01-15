@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+
+import numpy as np
+import sys, getopt
+
+inputfile = ''
+outputfile = None
+idx = None
+pwrs=''
+try:
+    opts, args = getopt.getopt(sys.argv[1:],"hn:o:i:",["index=","ofile","ifile"])
+except getopt.GetoptError:
+   print('final2yoon -i <inputppfile>')
+   sys.exit(2)
+for opt, arg in opts:
+   if opt == '-h':
+      print('final2yoon -i <inputppfile>')
+      sys.exit()
+   elif opt in ("-i", "--ifile"):
+      inputfile = arg
+   elif opt in ("-o", "--ofile"):
+      outputfile = arg
+   elif opt in ("-n", "--index"):
+      idx = int(arg)
+#end for
+
+print('\nInput file is: ', inputfile)
+
+if outputfile is None:
+    outputfile = 'params.in'
+#end if
+
+if idx is None:
+  print('Must provide index with -n <N> or --index=<N>')
+  sys.exit()
+#end if
+
+filepath1=inputfile
+f1=open(filepath1, "r")
+
+at_params=False
+paramstr=''
+count = 0
+for line in f1:
+    if at_params and ('valid permutation' in line or line=='\n'):
+        at_params=False
+        break
+    #end if
+    if at_params:
+      paramstr+=line  
+    #end if
+    if '  x=' in line:
+        count+=1
+        if count==idx:
+            at_params=True            
+    #end if
+#end for
+f1.close()
+d1=np.array(paramstr.split(),dtype=float)
+
+f = open(outputfile,'w')
+for di,d in enumerate(d1): 
+
+    dstr=str(d)+' x'+str(di+1)+' \n'
+    f.write(dstr)
+
+f.close()
+print('\n{} written'.format(outputfile))
+
+print()

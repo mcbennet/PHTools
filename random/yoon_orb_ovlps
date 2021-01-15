@@ -1,0 +1,145 @@
+#! /usr/bin/env python3
+
+import numpy as np
+import sys, getopt
+    
+clabels=['S','P','D','F','G']
+
+def ppchannel(r,coeff,alpha,powers):
+    val = 0
+    for ci,c in enumerate(coeff):
+        val = val+c*r**(powers[ci]-2)*np.exp(-alpha[ci]*r*r)
+    #end for
+    return val
+#end def
+
+def printchans(pots):
+    print('\nPrinting pseudopotential...')
+    lloc = clabels[len(pots)-1]
+    for i in range(len(pots)):
+        if i==len(pots)-1:
+            print(lloc)
+        else:
+            print(str(clabels[i])+'-'+str(lloc))
+        #end if
+        for i,p in enumerate(pots[i]):
+            print("{:3d} {:12f} {:12f}".format(int(p[0]),p[1],p[2]))
+        #end for
+    #end for
+#end def
+
+if len(sys.argv)<2:
+    print('plot_yoon_psuedo -i <inputppfile>')
+    sys.exit(2)
+#end if 
+
+inputlabels=None
+try:
+    opts, args = getopt.getopt(sys.argv[1:],"hf:g:r:",["ffile=","gfile=","rcut="])
+except getopt.GetoptError:
+   print('plot_yoon_psuedo -i <inputppfile>')
+   sys.exit(2)
+for opt, arg in opts:
+   if opt == '-h':
+      print('plot_yoon_psuedo -i <inputppfile>')
+      sys.exit()
+   elif opt in ("-f", "--ffile"):
+      inputfile1 = arg
+   elif opt in ("-g", "--gfile"):
+      inputfile2 = arg
+   elif opt in ("-r", "--rcut"):
+      rcuts = arg.split()
+#end try
+
+rcuts = np.array(rcuts,dtype=float)
+
+orbs1 = []
+orb = []
+read = True
+garbage_count = 0
+with open(inputfile1) as f:
+    for num, line in enumerate(f, 1):
+        if '  20. 0.' in line or not read:
+            
+            garbage_count+=1
+            if garbage_count==1:
+                read=False
+                orbs1.append(orb)
+            #end if
+
+            if garbage_count==3:
+                read=True
+                orb = []
+                garbage_count=0
+            #end if
+
+        else:
+    
+            x,y = line.split()
+            # save orb data
+            orb.append([x,y])
+            #norm+=
+
+orbs1 = np.array(orbs1,dtype=float)
+
+
+orbs2 = []
+orb = []
+read = True
+garbage_count = 0
+with open(inputfile2) as f:
+    for num, line in enumerate(f, 1):
+        if '  20. 0.' in line or not read:
+            
+            garbage_count+=1
+            if garbage_count==1:
+                read=False
+                orbs2.append(orb)
+            #end if
+
+            if garbage_count==3:
+                read=True
+                orb = []
+                garbage_count=0
+            #end if
+
+        else:
+    
+            x,y = line.split()
+            # save orb data
+            orb.append([x,y])
+            #norm+=
+
+orbs2 = np.array(orbs2,dtype=float)
+
+for oi in range(len(orbs1)):
+    ovlp1=0
+    ovlp2=0
+    
+    x10=orbs1[oi][0][0]
+    y10=orbs1[oi][0][1]
+    x20=orbs2[oi][0][0]
+    y20=orbs2[oi][0][1]
+
+    for vi in range(1,len(orbs1[oi])): 
+
+        if orbs1[oi][vi][0]<rcuts[oi]:
+
+            dx=orbs1[oi][vi][0]-x10
+
+            x1 = orbs1[oi][vi][0]
+            y1 = orbs1[oi][vi][1]
+
+            x2 = orbs2[oi][vi][0]
+            y2 = orbs2[oi][vi][1]
+
+            ovlp1+=dx*((x10*y10)*(x10*y10)+(x1*y1)*(x1*y1))/2.0
+            ovlp2+=dx*((x20*y20)*(x20*y20)+(x2*y2)*(x2*y2))/2.0
+
+            x10=x1
+            y10=y1
+            x20=x2
+            y20=y2
+
+
+    print((ovlp1-ovlp2)**2.)

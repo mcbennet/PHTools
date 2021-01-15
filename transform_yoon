@@ -1,0 +1,35 @@
+#! /usr/bin/env python3
+
+import numpy as np
+import sys, getopt
+from libpp import *
+    
+
+if len(sys.argv)<2:
+    print('plot_yoon_psuedo -i <inputppfile>')
+    sys.exit(2)
+#end if 
+
+exfile = __file__
+
+try:
+    opts, args = getopt.getopt(sys.argv[1:],"phi:k:l:o:",["ifile=","keep=","lmax","outfile="])
+except getopt.GetoptError:
+   print('{} -i <inputppfile>'.format(exfile))
+   sys.exit(2)
+for opt, arg in opts:
+   if opt == '-h':
+      print('{} -i <inputppfile>'.format(exfile))
+      sys.exit()
+   elif opt in ("-i", "--ifile"):
+      inputfile = arg
+   elif opt in ("-k", "--keep"):
+      keep = arg
+   elif opt in ("-l", "--lmax"):
+      lmax = int(arg)
+   elif opt in ("-o", "--outfile"):
+      writefile = True
+      outputfile = arg
+#end try
+
+transform_yoon(inputfile,keep,lmax,None)
