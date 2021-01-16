@@ -92,70 +92,91 @@ def transform_to_L2(pots,keep="s p",lmax=None):
     if not keep_local:
     
         vm = tpots[keep_l_vals[0]].copy()
+        lm = keep_l_vals[0]
         vn = tpots[keep_l_vals[1]].copy()
+        ln = keep_l_vals[1]
 
-        for l in range(lmax,0,-1):
+        vlocp = tpots[-1].copy()
 
-            # Each channel is given by vloc' + vL2 l(l+1)
-            #pot_l = 
-            print(l)
-            
-        #end ofr
+        denom = lm*(lm+1)-ln*(ln+1)
 
-        rpots = tpots.copy()
-
-    else:
-        
-        vm = tpots[keep_l_vals[0]].copy()
-      
-        # Local channel
-        vlocp = tpots[keep_l_vals[1]].copy()
-
-        vtmp = vm.copy()
-        fctr = (-keep_l_vals[1]*(keep_l_vals[1]+1.))
-        fctr = fctr/(keep_l_vals[0]*(keep_l_vals[0]+1.)-keep_l_vals[1]*(keep_l_vals[1]+1.))
-        for i,p in enumerate(vm):
-            vtmp[i][2] = p[2]*fctr
+        fctr1 = lm*(lm+1)/denom
+        for i,p in enumerate(vn):
+            vlocp = np.append(vlocp,np.array([[p[0],p[1],p[2]*fctr1]]),axis=0)
         #end for
-        vlocp = np.append(vlocp,vtmp,axis=0)
-
-        vtmp = vm.copy()
-        fctr = (lmax*(lmax+1))
-        fctr = fctr/(keep_l_vals[0]*(keep_l_vals[0]+1.)-keep_l_vals[1]*(keep_l_vals[1]+1.))
+        fctr2 = -ln*(ln+1)/denom
         for i,p in enumerate(vm):
-            vtmp[i][2] = p[2]*fctr
+            vlocp = np.append(vlocp,np.array([[p[0],p[1],p[2]*fctr2]]),axis=0)
         #end for
-        vlocp = np.append(vlocp,vtmp,axis=0)
-
-        #  dpots=[]
-        #  pos=0
-        #  for i in range(len(dchan)):
-        #      dtmp = d[2+nchan+int(pos):2+nchan+int(pos+dchan[i]*3)]
-        #      dtmp.shape=len(dtmp)//3,3
-        #      pos+=dchan[i]*3
-        #      dpots.append(dtmp)
-        #  #end for
-
-        #tpots[1] = vlocp.copy()
-        # modified local channel
+        fctr3 = lmax*(lmax+1)/denom
+        for i,p in enumerate(vm):
+            vlocp = np.append(vlocp,np.array([[p[0],p[1],p[2]*fctr3]]),axis=0)
+        #end for
+        fctr4 = -lmax*(lmax+1)/denom
+        for i,p in enumerate(vn):
+            vlocp = np.append(vlocp,np.array([[p[0],p[1],p[2]*fctr4]]),axis=0)
+        #end for
 
         rpots = [] 
         for l in range(lmax):
 
             vtmp = vm.copy()
-            fctr = (l*(l+1))
-            fctr = fctr/(keep_l_vals[0]*(keep_l_vals[0]+1.)-keep_l_vals[1]*(keep_l_vals[1]+1.))
+
+            fctr1 = l*(l+1)/denom
             for i,p in enumerate(vm):
-                vtmp[i][2] = p[2]*fctr
+                vtmp[i][2] = p[2]*fctr1
+            #end for
+            fctr2 = -l*(l+1)/denom
+            for i,p in enumerate(vn):
+                vtmp = np.append(vtmp,np.array([[p[0],p[1],p[2]*fctr2]]),axis=0)
+            #end for
+            fctr3 = -lmax*(lmax+1)/denom
+            for i,p in enumerate(vm):
+                vtmp = np.append(vtmp,np.array([[p[0],p[1],p[2]*fctr3]]),axis=0)
+            #end for
+            fctr4 = lmax*(lmax+1)/denom
+            for i,p in enumerate(vn):
+                vtmp = np.append(vtmp,np.array([[p[0],p[1],p[2]*fctr4]]),axis=0)
             #end for
             rpots.append(vtmp)
+
+        #end for
+        rpots.append(vlocp)
+
+    else:
+        
+        # Channel selected to remain unmodified
+        vm = tpots[keep_l_vals[0]].copy()
+        lm = keep_l_vals[0]
+      
+        # Local channel. Selected to remain unmodified
+        vlocp = tpots[keep_l_vals[1]].copy()
+        lloc = keep_l_vals[1]
+
+
+        fctr1 = (-lloc*(lloc+1))/(lm*(lm+1)-lloc*(lloc+1))
+        for i,p in enumerate(vm):
+            vlocp = np.append(vlocp,np.array([[p[0],p[1],p[2]*fctr1]]),axis=0)
+        #end for
+        fctr2 = (lmax*(lmax+1))/(lm*(lm+1)-lloc*(lloc+1))
+        for i,p in enumerate(vm):
+            vlocp = np.append(vlocp,np.array([[p[0],p[1],p[2]*fctr2]]),axis=0)
+        #end for
+
+        rpots = [] 
+        for l in range(lmax):
+
             vtmp = vm.copy()
-            fctr = -(lmax*(lmax+1))
-            fctr = fctr/(keep_l_vals[0]*(keep_l_vals[0]+1.)-keep_l_vals[1]*(keep_l_vals[1]+1.))
+
+            fctr1 = (l*(l+1))/(lm*(lm+1)-lloc*(lloc+1))
             for i,p in enumerate(vm):
-                vtmp[i][2] = p[2]*fctr
+                vtmp[i][2] = p[2]*fctr1
             #end for
-            rpots[l] = np.append(rpots[l],vtmp,axis=0)  
+            fctr2 = (lmax*(lmax+1))/(lm*(lm+1)-lloc*(lloc+1))
+            for i,p in enumerate(vm):
+                vtmp = np.append(vtmp,np.array([[p[0],p[1],p[2]*fctr2]]),axis=0)
+            #end for
+            rpots.append(vtmp)
 
         #end for
         rpots.append(vlocp)
@@ -293,7 +314,7 @@ def printchansmolpro(pots,Z,zae=None,outfile=None):
 
 #end def
 
-def transform_yoon(filepath,keep,lmax,outfile):
+def transform_yoon(filepath,keep,lmax,ncore=None,outfile=None,form='yoon'):
 
     f=open(filepath, "r")
     
@@ -317,20 +338,21 @@ def transform_yoon(filepath,keep,lmax,outfile):
 
     if keep is not None:
         tpots = transform_to_L2(dpots,keep,lmax)
-    
-    #  if transtype is not None:
-    #      if transtype==0:
-    #          tpots = dpots.copy()
-    #      elif transtype==1:
-    #          tpots = trans1(dpots,lmax)
-    #      elif transtype==2:
-    #          tpots = trans2(dpots,lmax)
-    #      elif transtype==3:
-    #          tpots = trans3(dpots,lmax)
-    #      #end if
-    #  #end if
-    
-    printchansyoon(tpots,dhead[0],outfile=outfile)
+    #end if
+
+    if form=='yoon':
+        printchansyoon(tpots,dhead[0],outfile=outfile)
+    elif form=='molpro':
+        if ncore is None:
+            print('For molpro format, the number of core electrons must be given via "ncore"')
+            quit()
+        #end if
+        printchansmolpro(tpots,dhead[0],ncore,outfile=outfile)
+    else:
+        print('form not recognized')
+    #end if
+
+    return tpots
         
 #end def
 

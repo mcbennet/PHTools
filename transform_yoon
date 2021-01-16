@@ -32,4 +32,6 @@ for opt, arg in opts:
       outputfile = arg
 #end try
 
-transform_yoon(inputfile,keep,lmax,None)
+tpots = transform_yoon(inputfile,keep,lmax,ncore=10,outfile=None,form='molpro')
+
+print(tpots)
