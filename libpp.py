@@ -44,6 +44,26 @@ def replace_zxe(inputfile):
 #end def
 
 
+def add_to_vL2(pots,pwrs,exps,coeffs):
+
+    tpots = pots.copy()
+
+    lmax = len(tpots)-1
+    for l in range(len(tpots)):
+        if l<lmax:
+            fctr = l*(l+1)-lmax*(lmax+1)
+        else:
+            fctr = lmax*(lmax+1)
+        #end if
+        for t in range(len(pwrs)):
+            tpots[l] = np.append(tpots[l],np.array([[pwrs[t],exps[t],coeffs[t]*fctr]]),axis=0)
+        #end for
+    #end for
+    return tpots
+
+#end def
+
+
 def transform_to_L2(pots,keep="s p",lmax=None):
 
     print('transform_to_L2')
@@ -145,6 +165,7 @@ def transform_to_L2(pots,keep="s p",lmax=None):
 
     else:
         
+        print('KEEP LOCAL')
         # Channel selected to remain unmodified
         vm = tpots[keep_l_vals[0]].copy()
         lm = keep_l_vals[0]
@@ -172,7 +193,7 @@ def transform_to_L2(pots,keep="s p",lmax=None):
             for i,p in enumerate(vm):
                 vtmp[i][2] = p[2]*fctr1
             #end for
-            fctr2 = (lmax*(lmax+1))/(lm*(lm+1)-lloc*(lloc+1))
+            fctr2 = -(lmax*(lmax+1))/(lm*(lm+1)-lloc*(lloc+1))
             for i,p in enumerate(vm):
                 vtmp = np.append(vtmp,np.array([[p[0],p[1],p[2]*fctr2]]),axis=0)
             #end for
@@ -340,6 +361,7 @@ def transform_yoon(filepath,keep,lmax,ncore=None,outfile=None,form='yoon'):
         tpots = transform_to_L2(dpots,keep,lmax)
     #end if
 
+    print('HERE')
     if form=='yoon':
         printchansyoon(tpots,dhead[0],outfile=outfile)
     elif form=='molpro':
@@ -352,6 +374,7 @@ def transform_yoon(filepath,keep,lmax,ncore=None,outfile=None,form='yoon'):
         print('form not recognized')
     #end if
 
+    print('HERE')
     return tpots
         
 #end def
@@ -764,5 +787,122 @@ def get_yoon_norm_diff(fort26,ref_fort26,rcuts):
         diffs.append(ovlp1-ovlp2)
     #end for
     return np.array(diffs)
+
+#end def
+
+# CORRECTING UNBOUNDEDNESS
+
+def p7(x,c):
+    val=0
+    for ci,cv in enumerate(c):
+        val+=cv*x**ci
+    return val
+#end def
+
+def Rs(x,dx,s,c):
+    if x+1-s<-dx:
+        return 0-(1-s)
+    elif x+1-s>dx:
+        return x
+    else:
+        return p7(x+1-s,c)-(1-s)
+#end def
+
+class fitClass:
+
+    def __init__(self):
+        pass
+
+    def gauss_correction(self,x,c1,c2,c3):
+        val = 0
+        for ci,c in enumerate([c1,c2,c3]):
+            val+=x**2.*c*np.exp(-self.exps[ci]*x**2.)
+        #end for
+        return val
+    #end def
+
+#end class
+
+def make_bound(exps0,pots,db,dbs):
+
+    nchan = len(pots)
+
+    A=[]
+    for i in range(8):
+        row=[]
+        for j in range(8):
+            if i<4:
+                if j-i<0:
+                    dcoeff=0
+                    dpower=0
+                else:
+                    dcoeff=math.factorial(j)/math.factorial(j-i)
+                    dpower=j-i
+                #end if
+                row.append(dcoeff*db**dpower)
+            else:
+                if j-(i-4)<0:
+                    dcoeff=0
+                    dpower=0
+                else:
+                    dcoeff=math.factorial(j)/math.factorial(j-(i-4))
+                    dpower=j-(i-4)
+                #end if
+                row.append(dcoeff*(-db)**dpower)
+            #end if
+        #end for
+        A.append(row)
+    #end for
+    
+    A = np.array(A)
+    b = np.array([db,1]+[0]*6)
+    c = np.linalg.inv(A).dot(b)
+
+    ng=3000
+    gmin=0.02
+    gmax=0.85
+    r = np.linspace( gmin, gmax, ng )
+    
+    # PP
+    v = []
+    for i in range(nchan):
+        vtmp = []
+        for j in range(len(r)):
+            vtmp.append(ppchannel(r[j],pots[i][:,2],pots[i][:,1],pots[i][:,0]))
+        #for
+        v.append(vtmp)
+    #for
+    v=np.array(v)
+    
+    # 2*r^2*VL2 
+    f = r*r*(v[1]-v[0])
+    # 2*r^2*V'L2 
+    fp = [Rs(fr,db,dbs,c) for fr in f]
+
+    undoundedness = 0
+    for fi,fx in enumerate(f):
+        undoundedness+=(fp[fi]-fx)*(gmax-gmin)/ng 
+    #end for
+    print('\npseudopotential undoundedness: ',undoundedness)
+
+    import matplotlib.pyplot as plt
+    from scipy.optimize import curve_fit
+
+    plt.plot(r, fp, 'g-', label='fp')
+
+
+    fit_instance = fitClass()
+    fit_instance.exps=exps0
+    popt, pcov = curve_fit(fit_instance.gauss_correction, r, f-fp)
+
+    plt.xlabel('r (bohr)')
+    plt.ylabel('$2r^2v_{L^2}$')
+    plt.plot(r, f-fit_instance.gauss_correction(r, *popt), 'r-',label='f-corr')
+    plt.plot(r, f, 'b-',label='f')
+    plt.plot(r, [-1]*len(r), 'k-',label=None)
+    plt.legend()
+    plt.show()
+
+    return popt
 
 #end def
