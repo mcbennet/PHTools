@@ -32,12 +32,14 @@ for opt, arg in opts:
       outputfile = arg
 #end try
 
+#zeff=6
+#ncore=2
 
-zeff=6
-ncore=2
+zeff  = 17
+ncore = 10
 
 tpots = transform_yoon(inputfile,keep,lmax,ncore=ncore,outfile=None,form='yoon')
-printchansyoon(tpots,zeff,'O.mod.pp.d')
+printchansyoon(tpots,zeff,'Co.mod.pp.d')
 
 fit_exps = [12.5,18.75,28.125]
 opt_coeffs = make_bound(fit_exps,tpots,1.6,0.0005)
@@ -45,5 +47,5 @@ opt_coeffs *= -1/2
 
 cpots = add_to_vL2(tpots,[2]*len(fit_exps),fit_exps,opt_coeffs)
 
-printchansyoon(cpots,zeff,'O.mod_corr.pp.d')
+printchansyoon(cpots,zeff,'Co.mod_corr.pp.d')
 
