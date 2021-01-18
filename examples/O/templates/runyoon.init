@@ -1,0 +1,82 @@
+#!/bin/bash
+
+echo 
+echo
+echo ">>>>>>>>>>>>>>>>>>>>>> BEGIN OPT.SH <<<<<<<<<<<<<<<<<<<<<<"
+
+refdir=/home/8gb/Projects/L2_Production/atoms/Co/ecps/ccECP_soft
+
+pwd
+
+
+mkdir -p workdir
+
+echo 
+cat params.in | awk 'BEGIN{printf "PARAMS: "} {printf "%6.3f ",$1} END{printf "\n"}'
+cp params.in workdir/params.in
+
+idx=0
+for i in {1..PMAX}
+do
+  # S COEFF
+  idx=`echo "1+$idx" | bc`
+  paramtmp=`grep " x${idx} " workdir/params.in | awk '{ $2 = ""; print }'`
+  param[${i}]=`echo "($(sed 's/[eE]+\{0,1\}/*10^/g' <<<"$paramtmp"))" | bc -l`
+done
+
+SED_COMMAND
+     " tmp.pp.d  &> workdir/minimal
+
+if grep -q "ZXE" workdir/minimal; then
+  /home/8gb/Projects/L2_Production/scripts/zxe -i workdir/minimal 
+fi
+
+# Transform 
+/home/8gb/Projects/L2_Production/scripts/transform_yoon -i workdir/minimal -t TRANSFORMTYPE -o workdir/pp.d
+
+# Copy Input
+cp templates/tmp.ip.d workdir/ip.d
+
+cd workdir
+
+if [ $HOSTNAME = "hilbert" ]
+then
+  echo ${HOME}/Programs/yoon/hfmesh 
+  ${HOME}/Programs/src/yoon/hfmesh &> hfmesh.log
+else
+  ${HOME}/Codes/src/yoon/hfmesh &> hfmesh.log
+fi
+
+echo 
+echo "EIGENVALUES Deltas: "
+paste <(head -12 out | tail -10 | awk '{print $5}') <(head -12 $refdir/out | tail -10 | awk '{print $5}') | awk 'BEGIN{n=0;wght[0]=0.5;wght[1]=1;wght[2]=1;wght[3]=1;wght[4]=1;wght[5]=1;wght[6]=1;wght[7]=1;wght[8]=1;wght[9]=1;} {printf "%7.4f ", wght[n]*($1-$2);n++} END{printf "\n"}'
+paste <(head -12 out | tail -10 | awk '{print $5}') <(head -12 $refdir/out | tail -10 | awk '{print $5}') | awk 'BEGIN{sumsq=0;n=0;wght[0]=0.5;wght[1]=1;wght[2]=1;wght[3]=1;wght[4]=1;wght[5]=1;wght[6]=1;wght[7]=1;wght[8]=1;wght[9]=1;} {sumsq+=wght[n]*($1-$2)*($1-$2)*10;n++} END{printf "%16.12f\n", sumsq}' &> results.out
+
+echo 
+echo "UNBOUNDEDNESS: "
+unboundstr=$(/home/8gb/Projects/L2_Production/scripts/abs_unbound -i pp.d | grep "pseudopotential undoundedness")
+unboundvar=$(echo $unboundstr | awk '{printf "%16.12f\n",$3}')
+
+unboundweight=5000.00000000000000
+echo $unboundstr
+echo "$unboundweight*$unboundvar" | bc -l | awk '{printf "%16.12f\n",$1}' >> results.out
+
+echo 
+echo NORM:
+normstr=$(/home/8gb/Projects/L2_Production/scripts/yoon_orb_ovlps -f fort.26 -g $refdir/fort.26 -r "0.8 1.6 0.8 0.8" | awk '{sum+=$1} END{printf "%16.12f\n",sum}')
+echo $normstr
+echo "$normstr*100.0000000000000" | bc -l | awk '{printf "%16.12f\n",$1}' >> results.out
+
+echo 
+printf "BEGIN RESULTS:\n"
+cat results.out
+printf "END RESULTS:\n"
+cp results.out ../$2
+cd ..
+
+#rm -r workdir
+#rm params.in
+echo
+echo ">>>>>>>>>>>>>>>>>>>>>> END OPT.SH <<<<<<<<<<<<<<<<<<<<<<"
+echo
+exit

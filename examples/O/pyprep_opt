@@ -1,0 +1,143 @@
+#! /usr/bin/env python3
+
+import os
+import numpy as np
+import sys, getopt
+from generic import obj   
+from libpp import *
+import socket
+
+inputfile=None
+weights=None
+rcuts=None
+transtype=None
+try:
+    opts, args = getopt.getopt(sys.argv[1:],"hi:l:w:r:t:d:",["ifile=","weights=","rcuts=","trans=","refdir="])
+except getopt.GetoptError:
+   print('pyprep_opt -i <inputppfile> -w <weights> -r <rcuts> -t <transtype> -d <refdir>')
+   sys.exit(2)
+for opt, arg in opts:
+   if opt == '-h':
+      print('pyprep_opt -i <inputppfile>')
+      sys.exit()
+   elif opt in ("-i", "--ifile"):
+      inputfile = arg
+   elif opt in ("-w", "--weights"):
+      weights = arg
+   elif opt in ("-r", "--rcuts"):
+      rcuts = arg
+   elif opt in ("-t", "--trans"):
+      transtype = int(arg)
+   elif opt in ("-d", "--refdir"):
+      refdir = arg
+#end try
+
+
+
+if inputfile is None or weights is None or rcuts is None or transtype is None or refdir is None:
+    print('prep_opt -i <inputppfile> -w <weights> -r <rcuts> -t <transtype> -d <refdir>')
+    sys.exit()
+
+print('\nInput file is: ', inputfile)
+print('\nReading pseudopotential...')
+f=open(inputfile, "r")
+
+d=np.array(f.read().split())
+
+f.seek(0)
+pptext = f.read()
+
+f.seek(0)
+zeropptext = f.read()
+zeropptext = zeropptext.replace('*',' ')
+f.close()
+
+f = open('zeroth.pp.d','w')
+f.write(zeropptext)
+f.close()
+
+if 'ZXE' in zeropptext:  
+    replace_zxe('zeroth.pp.d')
+#end if
+
+transform_yoon('zeroth.pp.d',transtype,'zeroth.pp.d')
+
+
+# HEADER
+dhead=d[0:2]
+# CHANNEL LENGTHS
+nchan=int(dhead[1])
+dchan=d[2:2+nchan]
+dchan=np.array(dchan,dtype=int)
+# POTENTIALS
+dpots=[]
+pos=0
+for i in range(len(dchan)):
+    dtmp = d[2+nchan+int(pos):2+nchan+int(pos+dchan[i]*3)]
+    dtmp.shape=len(dtmp)//3,3
+    pos+=dchan[i]*3
+    dpots.append(dtmp)
+#end for
+
+dp = obj()
+dp[0]=dpots[0]
+dp[1]=dpots[1]
+dp[2]=dpots[2]
+
+uf_param_str = ''
+uf_minparam_str = ''
+uf_maxparam_str = ''
+vcount=0
+for c in range(len(dpots)):
+    terms=[]
+    for t in range(len(dpots[c])):
+        params=[]
+        for p in range(len(dpots[c][t])):
+            if '*' in dpots[c][t][p]:
+                pptext=pptext.replace(dpots[c][t][p],'v{:03d}'.format(vcount),1)
+                params.extend([True])
+                uf_param_str+=dpots[c][t][p][:-1]+','
+                uf_minparam_str+='-10000.0,'
+                uf_maxparam_str+='10000.0,'
+                vcount+=1
+            else:
+                params.extend([False])
+            #end if
+        #end for
+        terms.append(params)
+    #end for
+    dp['v'+str(c)]=terms
+#end for
+uf_param_str=uf_param_str[:-1]
+uf_minparam_str=uf_minparam_str[:-1]
+uf_maxparam_str=uf_maxparam_str[:-1]
+
+
+f = open('./templates/userfu.init','r')
+ftext = f.read()
+ftext = ftext.replace('PARAMVALUES',uf_param_str)
+ftext = ftext.replace('MINVALUES',uf_minparam_str)
+ftext = ftext.replace('MAXVALUES',uf_maxparam_str)
+ftext = ftext.replace('n      =  -1000','n      =  {}'.format(vcount))
+ftext = ftext.replace('xst0[-1000]','xst0[{}]'.format(vcount+1))
+ftext = ftext.replace('ugloc[-1000]','ugloc[{}]'.format(vcount+1))
+ftext = ftext.replace('ogloc[-1000]','ogloc[{}]'.format(vcount+1))
+ftext = ftext.replace('WEIGHTS',weights)
+ftext = ftext.replace('RCUTS',rcuts)
+ftext = ftext.replace('TRANSFORM',str(transtype))
+ftext = ftext.replace('REFDIR',refdir)
+if socket.gethostname()!='hilbert':
+    ftext = ftext.replace('RUNYOON_EXE','/home/8gb/Projects/L2_Production/scripts/runyoon.py')
+else:
+    ftext = ftext.replace('RUNYOON_EXE','/home/mcbennett/Repositories/GitHub/mcbennet/L2/scripts/runyoon.py')
+f.close()
+
+
+f = open('userfu.c','w')
+f.write(ftext)
+f.close()
+
+f = open('tmp.pp.d','w')
+f.write(pptext)
+f.close()
+
